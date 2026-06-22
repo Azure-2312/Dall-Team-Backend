@@ -119,7 +119,8 @@ def list_users():
             "foto_perfil": u.foto_perfil,
             "cargo": u.cargo,
             "facultad": u.facultad,
-            "sancionado": u.alumno_perfil.sancionado if (u.rol == 'Estudiante' and u.alumno_perfil) else False
+            "sancionado": u.alumno_perfil.sancionado if (u.rol == 'Estudiante' and u.alumno_perfil) else False,
+            "ciclo": u.alumno_perfil.ciclo if (u.rol == 'Estudiante' and u.alumno_perfil) else None
         })
     return jsonify(result), 200
 
@@ -209,6 +210,24 @@ def update_user(id_usuario):
         if 'activo' in data:
             user.activo = bool(data['activo'])
             
+        if user.rol == 'Estudiante' and 'ciclo' in data:
+            alumno = Alumno.query.filter_by(id_usuario=user.id_usuario).first()
+            if alumno:
+                try:
+                    nuevo_ciclo = int(data['ciclo'])
+                    if 1 <= nuevo_ciclo <= 10:
+                        alumno.ciclo = nuevo_ciclo
+                        # Automatically update enrolled courses to match new cycle
+                        escuela_norm = alumno.escuela.replace("Escuela Profesional de ", "").strip()
+                        malla_cursos = Curso.query.filter(
+                            (Curso.escuela == alumno.escuela) |
+                            (Curso.escuela == f"Escuela Profesional de {escuela_norm}") |
+                            (Curso.escuela == escuela_norm)
+                        ).filter_by(ciclo_teorico=nuevo_ciclo).all()
+                        alumno.cursos_inscritos = [c.id_curso for c in malla_cursos]
+                except ValueError:
+                    pass
+
         if 'password' in data:
             password = data['password'].strip()
             if password:
@@ -338,24 +357,84 @@ def ingest_silabo_rag():
         return jsonify({"error": "El curso de malla destino no existe"}), 404
         
     try:
-        # Prompt LLM to parse syllabus text into 16 weeks or use structured fallback
-        print("Segmentando syllabus con pipeline RAG...")
+        # Prompt LLM to parse syllabus text into 16 weeks
+        print("Segmentando syllabus con pipeline RAG y Gemini...")
         
-        # Simple local chunking based on paragraphs if no LLM config
-        lines = [line.strip() for line in texto_silabo.split('\n') if line.strip()]
+        prompt = (
+            f"Eres un asistente académico experto de la Universidad Nacional Federico Villarreal (UNFV).\n"
+            f"Tu tarea es analizar el texto del sílabo del curso '{course.nombre_curso}' y extraer de forma estructurada "
+            f"los temas centrales y las lecturas recomendadas para cada una de las 16 semanas de clase.\n\n"
+            f"Texto del sílabo:\n"
+            f"\"\"\"\n{texto_silabo}\n\"\"\"\n\n"
+            f"Retorna ÚNICAMENTE un arreglo JSON de objetos que representen las semanas. No incluyas explicaciones ni bloques de código (sin ```json, etc.).\n"
+            f"El formato del arreglo JSON debe ser exactamente el siguiente:\n"
+            f"[\n"
+            f"  {{\n"
+            f"    \"semana\": 1,\n"
+            f"    \"tema_central\": \"Título o descripción corta del tema principal de la semana (máximo 150 caracteres)\",\n"
+            f"    \"lecturas_obligatorias\": \"Título del libro, capítulo o tema sugerido a leer (máximo 150 caracteres)\"\n"
+            f"  }},\n"
+            f"  ...\n"
+            f"]\n\n"
+            f"REGLA CRÍTICA: Debes generar exactamente 16 objetos en el arreglo (uno para cada semana de la 1 a la 16). "
+            f"Si el sílabo original contiene menos semanas o temas de unidad, distribúyelos de forma lógica o "
+            f"crea temas secuenciales académicos coherentes con la temática del curso '{course.nombre_curso}' para completar las 16 semanas."
+        )
+
+        weeks_data = []
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        if gemini_key:
+            try:
+                from google import genai as _genai_new
+                from google.genai import types as _gtypes_new
+                
+                _client = _genai_new.Client(api_key=gemini_key)
+                res = _client.models.generate_content(
+                    model='gemini-2.0-flash-lite',
+                    contents=prompt,
+                    config=_gtypes_new.GenerateContentConfig(
+                        response_mime_type='application/json'
+                    )
+                )
+                text_resp = res.text.strip()
+                parsed = json.loads(text_resp)
+                if isinstance(parsed, list):
+                    weeks_data = parsed
+                elif isinstance(parsed, dict) and "semanas" in parsed:
+                    weeks_data = parsed["semanas"]
+                elif isinstance(parsed, dict):
+                    for k, v in parsed.items():
+                        if isinstance(v, list) and len(v) == 16:
+                            weeks_data = v
+                            break
+            except Exception as gemini_err:
+                print(f"Error llamando a Gemini para segmentar sílabo: {gemini_err}. Usando fallback local...")
+
+        # Fallback local en caso de error o datos inválidos
+        if not weeks_data or len(weeks_data) != 16:
+            print("Usando fallback de segmentación local...")
+            lines = [line.strip() for line in texto_silabo.split('\n') if line.strip()]
+            weeks_data = []
+            for week in range(1, 17):
+                line_idx = (week - 1) % len(lines) if lines else 0
+                tema = lines[line_idx] if lines else f"Tema de Unidad - Semana {week}"
+                lectura = f"Lectura complementaria {week} para {course.nombre_curso}"
+                weeks_data.append({
+                    "semana": week,
+                    "tema_central": tema,
+                    "lecturas_obligatorias": lectura
+                })
+                
         weeks_generated = []
-        
-        # Generate 16 weeks
-        for week in range(1, 17):
-            # Select line or generate concept
-            line_idx = (week - 1) % len(lines) if lines else 0
-            tema = lines[line_idx] if lines else f"Tema de Unidad - Semana {week}"
-            lectura = f"Lectura complementaria {week} para {course.nombre_curso}"
+        for w_info in weeks_data:
+            week = w_info.get("semana") or w_info.get("semana_numero") or len(weeks_generated) + 1
+            tema = w_info.get("tema_central") or f"Tema de Unidad - Semana {week}"
+            lectura = w_info.get("lecturas_obligatorias") or f"Lectura complementaria {week}"
             
             # Vectorize
             vector = rag_service.get_embedding(f"{tema} {lectura}")
             
-            # Save
+            # Save or Update
             timeline_entry = SilaboTimeline.query.filter_by(id_curso=id_curso, semana_numero=week).first()
             if timeline_entry:
                 timeline_entry.tema_central = tema
@@ -708,7 +787,12 @@ def get_malla_by_escuela(escuela):
     GET /api/admin/malla/<escuela>
     Returns all courses for the specified school (escuela).
     """
-    courses = Curso.query.filter_by(escuela=escuela).order_by(Curso.ciclo_teorico).all()
+    escuela_norm = escuela.replace("Escuela Profesional de ", "").strip()
+    courses = Curso.query.filter(
+        (Curso.escuela == escuela) |
+        (Curso.escuela == f"Escuela Profesional de {escuela_norm}") |
+        (Curso.escuela == escuela_norm)
+    ).order_by(Curso.ciclo_teorico).all()
     return jsonify([{
         "id_curso": c.id_curso,
         "nombre_curso": c.nombre_curso,
