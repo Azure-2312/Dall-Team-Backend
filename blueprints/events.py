@@ -152,7 +152,7 @@ def api_get_quick_message():
         "- AUTOEVALUACIÓN: Quizzes interactivos adaptativos de los temas del sílabo cargados hasta la semana anterior. Si se equivoca, registra debilidades.\n"
         "- BIBLIOTECA KOHA: Buscador físico de libros disponibles en sedes de la UNFV.\n"
         "- TUTORÍAS: El alumno NO agenda de forma directa seleccionando fecha/hora libres. Debe solicitar la tutoría grupal subiendo obligatoriamente un archivo Word firmado con cantidad de alumnos. El administrador OTPS la aprueba o rechaza. Una vez aprobada, se asigna docente, horario (día y hora) y enlace de Teams. También puede unirse a tutorías grupales de sus compañeros.\n"
-        "- SOPORTE OBU: Consultas de bienestar mental, social o trámites."
+        "- MIS NOTAS: Consulta de notas, promedios ponderados y cálculo de nota mínima requerida en el examen final para aprobar."
     )
 
     gemini_key = os.environ.get('GEMINI_API_KEY')

@@ -756,8 +756,8 @@ def timeline_chat():
                 "   - Si el administrador la aprueba, se le asigna un docente tutor, un horario (día y hora), escuela/pabellón y un enlace de videollamada para reunirse.\n"
                 "   - El alumno también puede unirse a tutorías grupales de su facultad creadas por otros compañeros en la sección 'Tutorías de la Facultad'.\n"
                 "   - Para completarla, el alumno puede marcar la tutoría como completada 2 horas después de la hora de inicio.\n"
-                "5. SOPORTE OBU (Bienestar Universitario):\n"
-                "   - Permite al estudiante realizar consultas de orientación de bienestar, salud mental o derivación institucional.\n"
+                "5. MIS NOTAS (Calificaciones):\n"
+                "   - Permite al estudiante consultar sus notas de prácticas calificadas (PC1, PC2), exámenes parcial y final, y promedio final ponderado. Muestra también la nota mínima requerida en el examen final para aprobar el curso (alcanzar 10.5) y el nivel de riesgo académico (Sin Riesgo, Riesgo Medio, Riesgo Alto).\n"
                 "6. MI PERFIL:\n"
                 "   - Permite cambiar la contraseña o subir una foto de perfil.\n"
             )

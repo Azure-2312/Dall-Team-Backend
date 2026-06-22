@@ -38,6 +38,7 @@ def create_app(config_class=Config):
     from blueprints.crowdsourcing import crowdsourcing_bp
     from blueprints.cells import cells_bp
     from blueprints.docente_analytics import docente_analytics_bp
+    from blueprints.notas import notas_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(academic_bp, url_prefix='/api/academic')
@@ -52,6 +53,7 @@ def create_app(config_class=Config):
     app.register_blueprint(crowdsourcing_bp, url_prefix='/api/crowdsourcing')
     app.register_blueprint(cells_bp, url_prefix='/api/cells')
     app.register_blueprint(docente_analytics_bp, url_prefix='/api/docente')
+    app.register_blueprint(notas_bp, url_prefix='/api/notas')
     
     @app.route('/')
     def index():

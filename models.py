@@ -406,3 +406,68 @@ class MaterialRefuerzoDocente(db.Model):
     curso = db.relationship('Curso', backref=db.backref('materiales_refuerzo', lazy=True))
 
 
+# 21. NotasCurso Table - student grades per course
+class NotasCurso(db.Model):
+    __tablename__ = 'notas_curso'
+    id_nota = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_alumno = db.Column(db.String(10), db.ForeignKey('alumnos.id_alumno', ondelete='CASCADE'), nullable=False)
+    id_curso = db.Column(db.String(10), db.ForeignKey('cursos.id_curso', ondelete='CASCADE'), nullable=False)
+    practica_calificada_1 = db.Column(db.Float, nullable=True)
+    practica_calificada_2 = db.Column(db.Float, nullable=True)
+    examen_parcial = db.Column(db.Float, nullable=True)
+    examen_final = db.Column(db.Float, nullable=True)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('id_alumno', 'id_curso', name='unique_alumno_curso_notas'),
+    )
+
+    alumno = db.relationship('Alumno', backref=db.backref('notas_cursos', lazy=True, cascade='all,delete-orphan'))
+    curso = db.relationship('Curso', backref=db.backref('notas_alumnos', lazy=True))
+
+    @property
+    def ta(self):
+        p1 = self.practica_calificada_1
+        p2 = self.practica_calificada_2
+        if p1 is not None and p2 is not None:
+            return (p1 + p2) / 2.0
+        elif p1 is not None:
+            return p1
+        elif p2 is not None:
+            return p2
+        return 0.0
+
+    @property
+    def promedio_final(self):
+        ta_val = self.ta
+        ep = self.examen_parcial or 0.0
+        ef = self.examen_final or 0.0
+        return (ta_val * 0.40) + (ep * 0.30) + (ef * 0.30)
+
+    @property
+    def nota_minima_para_aprobar(self):
+        ta_val = self.ta
+        ep = self.examen_parcial or 0.0
+        required = (10.5 - (ta_val * 0.40) - (ep * 0.30)) / 0.30
+        if required < 0.0:
+            return 0.0
+        if required > 20.0:
+            return 20.0
+        return round(required, 2)
+
+    def to_dict(self):
+        return {
+            "id_nota": self.id_nota,
+            "id_alumno": self.id_alumno,
+            "id_curso": self.id_curso,
+            "practica_calificada_1": self.practica_calificada_1,
+            "practica_calificada_2": self.practica_calificada_2,
+            "examen_parcial": self.examen_parcial,
+            "examen_final": self.examen_final,
+            "ta": round(self.ta, 2) if self.ta is not None else 0.0,
+            "promedio_final": round(self.promedio_final, 2),
+            "nota_minima_para_aprobar": self.nota_minima_para_aprobar
+        }
+
+
+
