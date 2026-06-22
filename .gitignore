@@ -1,0 +1,68 @@
+# Environment variables and secrets
+.env
+*.env
+.env.*
+
+# Python compilation and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Databases and instance files
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploaded documents and files
+uploads/
+*.pdf
+
+# Test, debugging, and scratch files
+test_*.py
+*test*.py
+diagnostic.py
+check_db.py
+inspect_*.py
+refactor_*.py
+setup_postgres.py
+search_*.py
+print_*.py
+list_models*.py
+find_*.py
+
+# IDE / Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
