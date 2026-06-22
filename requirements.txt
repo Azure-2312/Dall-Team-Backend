@@ -12,3 +12,5 @@ PyJWT==2.8.0
 beautifulsoup4==4.12.3
 google-genai==2.9.0
 pypdf==6.13.3
+gunicorn
+
