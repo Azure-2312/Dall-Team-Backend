@@ -316,3 +316,93 @@ class AlumnoEvento(db.Model):
     alumno = db.relationship('Alumno', backref=db.backref('eventos', lazy=True, cascade='all,delete-orphan'))
 
 
+# 15. ExamenObjetivo Table - exam objectives for study routes
+class ExamenObjetivo(db.Model):
+    __tablename__ = 'examenes_objetivos'
+    id_examen = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_alumno = db.Column(db.String(10), db.ForeignKey('alumnos.id_alumno', ondelete='CASCADE'), nullable=False)
+    id_curso = db.Column(db.String(10), db.ForeignKey('cursos.id_curso', ondelete='CASCADE'), nullable=False)
+    fecha_limite = db.Column(db.DateTime, nullable=False)
+    nivel_dificultad = db.Column(db.Integer, default=3, nullable=False) # 1 to 5
+    temas_asociados = db.Column(db.JSON, default=list, nullable=True) # list of strings
+    
+    alumno = db.relationship('Alumno', backref=db.backref('examenes_objetivos', lazy=True, cascade='all,delete-orphan'))
+    curso = db.relationship('Curso', backref=db.backref('examenes_objetivos', lazy=True))
+
+
+# 16. MicroTareaDiaria Table - individual daily tasks of a study route
+class MicroTareaDiaria(db.Model):
+    __tablename__ = 'micro_tareas_diarias'
+    id_tarea = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_examen = db.Column(db.Integer, db.ForeignKey('examenes_objetivos.id_examen', ondelete='CASCADE'), nullable=False)
+    fecha_asignada = db.Column(db.Date, nullable=False)
+    meta_texto = db.Column(db.Text, nullable=False)
+    tiempo_estimado = db.Column(db.Integer, nullable=False) # in minutes
+    completado = db.Column(db.Boolean, default=False, nullable=False)
+    
+    examen = db.relationship('ExamenObjetivo', backref=db.backref('tareas_diarias', lazy=True, cascade='all,delete-orphan'))
+
+
+# 17. PreguntaComunitaria Table - crowdsourced exam questions
+class PreguntaComunitaria(db.Model):
+    __tablename__ = 'preguntas_comunitarias'
+    id_pregunta = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    aportante_id = db.Column(db.String(10), db.ForeignKey('alumnos.id_alumno', ondelete='SET NULL'), nullable=True)
+    facultad = db.Column(db.String(100), nullable=False)
+    id_curso = db.Column(db.String(10), db.ForeignKey('cursos.id_curso', ondelete='CASCADE'), nullable=False)
+    profesor = db.Column(db.String(100), nullable=True)
+    imagen_path = db.Column(db.String(255), nullable=True)
+    pregunta_texto = db.Column(db.Text, nullable=False)
+    respuesta_correcta = db.Column(db.Text, nullable=False)
+    score_confianza = db.Column(db.Float, default=0.0, nullable=False)
+    estado = db.Column(db.String(30), default='En Revision', nullable=False) # 'Publicada', 'En Revision'
+    nivel_dificultad = db.Column(db.String(20), default='Intermedio', nullable=False) # 'Facil', 'Intermedio', 'Dificil'
+    temas_clave = db.Column(db.JSON, default=list, nullable=True)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    aportante = db.relationship('Alumno', backref=db.backref('preguntas_aportadas', lazy=True))
+    curso = db.relationship('Curso', backref=db.backref('preguntas_comunitarias', lazy=True))
+
+
+# 18. CelulaEstudio Table - student study groups
+class CelulaEstudio(db.Model):
+    __tablename__ = 'celulas_estudio'
+    id_celula = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_curso = db.Column(db.String(10), db.ForeignKey('cursos.id_curso', ondelete='CASCADE'), nullable=False)
+    tema_comun = db.Column(db.String(255), nullable=False)
+    ubicacion_reunion = db.Column(db.String(255), nullable=True) # physical meeting point
+    enlace_virtual = db.Column(db.String(255), nullable=True) # temporary virtual room link
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    activo = db.Column(db.Boolean, default=True, nullable=False)
+    
+    curso = db.relationship('Curso', backref=db.backref('celulas_estudio', lazy=True))
+
+
+# 19. AlumnoCelula Table - association of students inside study cells
+class AlumnoCelula(db.Model):
+    __tablename__ = 'alumnos_celula'
+    id_registro = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_celula = db.Column(db.Integer, db.ForeignKey('celulas_estudio.id_celula', ondelete='CASCADE'), nullable=False)
+    id_alumno = db.Column(db.String(10), db.ForeignKey('alumnos.id_alumno', ondelete='CASCADE'), nullable=False)
+    pseudonimo = db.Column(db.String(100), nullable=False)
+    aceptado = db.Column(db.Boolean, default=False, nullable=False)
+    fecha_union = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    celula = db.relationship('CelulaEstudio', backref=db.backref('miembros', lazy=True, cascade='all,delete-orphan'))
+    alumno = db.relationship('Alumno', backref=db.backref('celulas_participa', lazy=True))
+
+
+# 20. MaterialRefuerzoDocente Table - reinforcement material shared by teachers
+class MaterialRefuerzoDocente(db.Model):
+    __tablename__ = 'materiales_refuerzo_docente'
+    id_material = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id_docente = db.Column(db.Integer, db.ForeignKey('docentes.id_docente', ondelete='CASCADE'), nullable=False)
+    id_curso = db.Column(db.String(10), db.ForeignKey('cursos.id_curso', ondelete='CASCADE'), nullable=False)
+    tema = db.Column(db.String(255), nullable=False)
+    archivo_path = db.Column(db.String(255), nullable=False)
+    fecha_subida = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    docente = db.relationship('Docente', backref=db.backref('materiales_refuerzo', lazy=True, cascade='all,delete-orphan'))
+    curso = db.relationship('Curso', backref=db.backref('materiales_refuerzo', lazy=True))
+
+

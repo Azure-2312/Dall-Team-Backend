@@ -33,6 +33,11 @@ def create_app(config_class=Config):
     from blueprints.wellbeing import wellbeing_bp
     from blueprints.admin import admin_bp
     from blueprints.events import events_bp
+    from blueprints.copilot import copilot_bp
+    from blueprints.study_routes import study_routes_bp
+    from blueprints.crowdsourcing import crowdsourcing_bp
+    from blueprints.cells import cells_bp
+    from blueprints.docente_analytics import docente_analytics_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(academic_bp, url_prefix='/api/academic')
@@ -42,6 +47,11 @@ def create_app(config_class=Config):
     app.register_blueprint(wellbeing_bp, url_prefix='/api/wellbeing')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(events_bp, url_prefix='/api/events')
+    app.register_blueprint(copilot_bp, url_prefix='/api/copilot')
+    app.register_blueprint(study_routes_bp, url_prefix='/api/study-routes')
+    app.register_blueprint(crowdsourcing_bp, url_prefix='/api/crowdsourcing')
+    app.register_blueprint(cells_bp, url_prefix='/api/cells')
+    app.register_blueprint(docente_analytics_bp, url_prefix='/api/docente')
     
     @app.route('/')
     def index():

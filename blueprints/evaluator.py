@@ -1,7 +1,11 @@
 from flask import Blueprint, jsonify, request
-from models import db, SilaboTimeline, AlumnoDebilidad, Curso
+from models import db, SilaboTimeline, AlumnoDebilidad, Curso, AlumnoEvento
 from services.rag_service import RAGService
 from blueprints.timeline import get_current_academic_week
+from services.gemini_client_manager import gemini_manager
+from google.genai import types as _gtypes_new
+from datetime import datetime, timedelta
+import json
 
 evaluator_bp = Blueprint('evaluator', __name__)
 rag_service = RAGService()
@@ -157,7 +161,125 @@ def log_quiz_failure():
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
+
+@evaluator_bp.route('/submit-answer', methods=['POST'])
+def submit_answer():
+    """
+    Saves response telemetry, checks fatigue rules, and flags if screen lock is needed.
+    """
+    data = request.json
+    if not data or not all(k in data for k in ('id_alumno', 'id_curso', 'es_correcto', 'tiempo_respuesta_segundos')):
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
         
+    id_alumno = data['id_alumno']
+    id_curso = data['id_curso']
+    es_correcto = data['es_correcto']
+    tiempo = int(data['tiempo_respuesta_segundos'])
+    sesion_duracion_minutos = int(data.get('sesion_duracion_minutos', 0))
+    clicks_repetitivos = bool(data.get('clicks_repetitivos', False))
+    
+    # Log event
+    event_metadata = {
+        "id_curso": id_curso,
+        "es_correcto": es_correcto,
+        "tiempo_respuesta_segundos": tiempo,
+        "clicks_repetitivos": clicks_repetitivos
+    }
+    
+    evt = AlumnoEvento(
+        id_alumno=id_alumno,
+        tipo_evento="simulador_respuesta",
+        metadata_json=json.dumps(event_metadata)
+    )
+    db.session.add(evt)
+    db.session.commit()
+    
+    # Check fatigue rules
+    congelar = False
+    motivo = ""
+    tiempo_bloqueo_minutos = 5
+    
+    # RULE 1: Frustration
+    # If consecutive incorrect answers >= 4 in the last 10 minutes
+    ten_minutes_ago = datetime.utcnow() - timedelta(minutes=10)
+    recent_events = AlumnoEvento.query.filter(
+        AlumnoEvento.id_alumno == id_alumno,
+        AlumnoEvento.tipo_evento == "simulador_respuesta",
+        AlumnoEvento.fecha_evento >= ten_minutes_ago
+    ).order_by(AlumnoEvento.fecha_evento.desc()).all()
+    
+    incorrect_consecutive = 0
+    for re in recent_events:
+        meta = json.loads(re.metadata_json)
+        if not meta.get("es_correcto", False):
+            incorrect_consecutive += 1
+        else:
+            # Broken sequence
+            break
+            
+    if incorrect_consecutive >= 4:
+        congelar = True
+        motivo = "frustracion"
+        tiempo_bloqueo_minutos = 5
+        
+    # RULE 2: Night Fatigue
+    # Server hour between 01:00 AM and 05:00 AM AND session duration >= 120 minutes
+    now_hour = datetime.now().hour
+    if 1 <= now_hour <= 5 and sesion_duracion_minutos >= 120:
+        congelar = True
+        motivo = "fatiga_nocturna"
+        tiempo_bloqueo_minutos = 10
+        
+    # If blocked, log a block event
+    if congelar:
+        block_evt = AlumnoEvento(
+            id_alumno=id_alumno,
+            tipo_evento="evaluador_bloqueado",
+            metadata_json=json.dumps({"motivo": motivo, "tiempo_bloqueo_minutos": tiempo_bloqueo_minutos})
+        )
+        db.session.add(block_evt)
+        db.session.commit()
+        
+    return jsonify({
+        "es_correcto": es_correcto,
+        "congelar": congelar,
+        "motivo": motivo,
+        "tiempo_bloqueo_minutos": tiempo_bloqueo_minutos,
+        "incorrectas_consecutivas": incorrect_consecutive
+    }), 200
+
+@evaluator_bp.route('/explain', methods=['POST'])
+def explain_incorrect_answer():
+    """
+    Generates an empathetic step-by-step explanation for an incorrect answer using Gemini.
+    """
+    data = request.json
+    if not data or not all(k in data for k in ('pregunta_texto', 'respuesta_correcta', 'respuesta_alumno')):
+        return jsonify({"error": "Faltan campos obligatorios"}), 400
+        
+    pregunta = data['pregunta_texto']
+    correcta = data['respuesta_correcta']
+    alumno = data['respuesta_alumno']
+    
+    system_prompt = (
+        "Eres un tutor empático y comprensivo de la UNFV. Explica paso a paso por qué la respuesta "
+        "seleccionada por el estudiante es incorrecta y cómo llegar a la respuesta correcta de manera didáctica. "
+        "Usa un tono alentador y evita palabras punitivas como 'fallaste', 'error grave', 'incorrecto'. "
+        "Devuelve la respuesta en formato Markdown con subtítulos."
+    )
+    user_prompt = f"Pregunta: {pregunta}\nRespuesta Correcta: {correcta}\nRespuesta del Alumno: {alumno}"
+    
+    try:
+        def explain_op(client, model_name):
+            return client.models.generate_content(
+                model=model_name,
+                contents=[system_prompt, user_prompt]
+            )
+        response = gemini_manager.execute_with_retry(explain_op)
+        return jsonify({"explicacion": response.text}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @evaluator_bp.route('/quiz/weaknesses/<id_alumno>/<id_curso>', methods=['GET'])
 def get_weaknesses(id_alumno, id_curso):
     """Retrieves all tracked weaknesses for a student in a course."""
