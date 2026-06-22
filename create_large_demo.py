@@ -53,7 +53,7 @@ def create_large_demo():
             activo=True,
             facultad="FIIS"
         )
-        u.set_password("student")  # default password is 'student'
+        u.set_password("123456")  # default password is '123456'
         db.session.add(u)
         db.session.commit()
         
