@@ -4,6 +4,7 @@ from models import db, SilaboTimeline, Curso, Alumno, ApunteEstudiante, AlumnoDe
 from services.rag_service import RAGService
 from services.koha_service import KohaService
 from services.event_tracker import get_engagement_signals, get_recent_events
+from services.gemini_client_manager import gemini_manager
 import os
 from werkzeug.utils import secure_filename
 
@@ -516,13 +517,9 @@ def timeline_chat():
     
     # 4. Classify query: study-related vs. chit-chat / admin / welfare
     is_study_related = True
-    gemini_key = os.environ.get('GEMINI_API_KEY')
     
-    if gemini_key:
+    if gemini_manager.keys:
         try:
-            from google import genai as _genai
-            from google.genai import types as _gtypes
-            _client = _genai.Client(api_key=gemini_key)
             classification_prompt = (
                 f"Clasifica si el siguiente mensaje de un alumno es una consulta de contenido académico directo, es decir, sobre temas de estudio, "
                 f"explicación de conceptos teóricos, resolución de ejercicios o dudas de la materia (responde 'ESTUDIO'), o si es un saludo, despedida, "
@@ -531,11 +528,15 @@ def timeline_chat():
                 f"Mensaje del alumno: \"{mensaje}\"\n"
                 f"Responde únicamente con una de estas palabras en mayúsculas: 'ESTUDIO' o 'CHIT-CHAT'."
             )
-            class_res = _client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=classification_prompt
-            )
-            class_text = class_res.text.strip().upper()
+            
+            def classify_op(client, model_name):
+                res = client.models.generate_content(
+                    model=model_name,
+                    contents=classification_prompt
+                )
+                return res.text.strip().upper()
+                
+            class_text = gemini_manager.execute_with_retry(classify_op)
             if 'CHIT-CHAT' in class_text:
                 is_study_related = False
         except Exception as classification_ex:
@@ -573,11 +574,9 @@ def timeline_chat():
     gemini_success = False
     respuesta_texto = ""
     
-    if gemini_key:
+    if gemini_manager.keys:
         try:
-            from google import genai as _genai
             from google.genai import types as _gtypes
-            _client = _genai.Client(api_key=gemini_key)
             signals = get_engagement_signals(id_alumno)
             recent_events = get_recent_events(id_alumno, limit=5)
             
@@ -710,7 +709,6 @@ def timeline_chat():
                 
             # Build contents list for the new SDK
             import json as _json, mimetypes as _mimetypes
-            from google.genai import types as _gtypes
             
             contents = []
             # System context as first user message
@@ -741,13 +739,16 @@ def timeline_chat():
             # Add current user message
             contents.append(_gtypes.Content(role='user', parts=[_gtypes.Part(text=mensaje)]))
             
-            response = _client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=contents,
-                config=_gtypes.GenerateContentConfig(
-                    response_mime_type='application/json'
+            def chat_op(client, model_name):
+                return client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=_gtypes.GenerateContentConfig(
+                        response_mime_type='application/json'
+                    )
                 )
-            )
+                
+            response = gemini_manager.execute_with_retry(chat_op)
             raw_text = response.text.strip()
             try:
                 parsed = _json.loads(raw_text)

@@ -5,18 +5,12 @@ import numpy as np
 from google import genai as _genai_new
 from google.genai import types as _gtypes_new
 from openai import OpenAI
+from services.gemini_client_manager import gemini_manager
 
 class RAGService:
     def __init__(self):
-        self.gemini_key = os.environ.get('GEMINI_API_KEY')
         self.openai_key = os.environ.get('OPENAI_API_KEY')
         
-        # Configure Gemini client if available
-        if self.gemini_key:
-            self._gemini_client = _genai_new.Client(api_key=self.gemini_key)
-        else:
-            self._gemini_client = None
-            
         # Configure OpenAI if available
         self.openai_client = OpenAI(api_key=self.openai_key) if self.openai_key else None
 
@@ -40,12 +34,14 @@ class RAGService:
                 print(f"OpenAI Embedding Error: {e}. Falling back...")
                 
         # 2. Try Gemini (Note: Gemini embeddings are usually 768, we pad/repeat to 1536 if needed)
-        if self.gemini_key and self._gemini_client:
+        if gemini_manager.keys:
             try:
-                result = self._gemini_client.models.embed_content(
-                    model="models/text-embedding-004",
-                    contents=text
-                )
+                def embed_op(client, model_name):
+                    return client.models.embed_content(
+                        model="models/text-embedding-004",
+                        contents=text
+                    )
+                result = gemini_manager.execute_with_retry(embed_op)
                 emb = result.embeddings[0].values
                 # Pad/repeat to match 1536
                 if len(emb) < 1536:
@@ -112,15 +108,17 @@ class RAGService:
         user_prompt = f"Tema: {topic}\nContexto: {context}\nCantidad de preguntas: {count}"
 
         # 1. Try Gemini
-        if self.gemini_key and self._gemini_client:
+        if gemini_manager.keys:
             try:
-                response = self._gemini_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[system_prompt, user_prompt],
-                    config=_gtypes_new.GenerateContentConfig(
-                        response_mime_type="application/json"
+                def quiz_op(client, model_name):
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=[system_prompt, user_prompt],
+                        config=_gtypes_new.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
                     )
-                )
+                response = gemini_manager.execute_with_retry(quiz_op)
                 data = json.loads(response.text)
                 return data.get("questions", [])
             except Exception as e:
@@ -161,15 +159,17 @@ class RAGService:
         )
         
         # 1. Try Gemini
-        if self.gemini_key and self._gemini_client:
+        if gemini_manager.keys:
             try:
-                response = self._gemini_client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[system_prompt, f"Texto del estudiante: {text}"],
-                    config=_gtypes_new.GenerateContentConfig(
-                        response_mime_type="application/json"
+                def sentiment_op(client, model_name):
+                    return client.models.generate_content(
+                        model=model_name,
+                        contents=[system_prompt, f"Texto del estudiante: {text}"],
+                        config=_gtypes_new.GenerateContentConfig(
+                            response_mime_type="application/json"
+                        )
                     )
-                )
+                response = gemini_manager.execute_with_retry(sentiment_op)
                 return json.loads(response.text)
             except Exception as e:
                 print(f"Gemini Sentiment Analysis Error: {e}. Falling back...")
