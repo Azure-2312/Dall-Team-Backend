@@ -54,6 +54,9 @@ class GeminiClientManager:
         attempts = len(self.keys)
         last_error = None
         
+        # Pop model_name from kwargs, default to gemini-2.5-flash
+        model_name = kwargs.pop('model_name', 'gemini-2.5-flash')
+        
         for attempt in range(attempts):
             client, key = self.get_client_and_key()
             if not client:
@@ -61,8 +64,6 @@ class GeminiClientManager:
                 continue
                 
             try:
-                # We always use gemini-2.5-flash as requested by the user
-                model_name = 'gemini-2.5-flash'
                 return operation_func(client, model_name, *args, **kwargs)
             except Exception as e:
                 error_str = str(e)

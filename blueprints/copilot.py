@@ -17,29 +17,51 @@ def generate_script():
     id_curso = data['id_curso']
     tiempo = int(data['tiempo_trayecto']) # in minutes
     modalidad = data['modalidad'] # 'resumen' or 'trivia'
+    rango = data.get('rango', 'todas') # 'todas' or 'semana_actual'
     
     # Calculate academic week
     week = get_current_academic_week()
     
-    # Get syllabus entries up to this week
-    entries = SilaboTimeline.query.filter(
-        SilaboTimeline.id_curso == id_curso,
-        SilaboTimeline.semana_numero <= week
-    ).order_by(SilaboTimeline.semana_numero.asc()).all()
-    
+    # Get syllabus entries based on study range
+    if rango == 'semana_actual':
+        entries = SilaboTimeline.query.filter(
+            SilaboTimeline.id_curso == id_curso,
+            SilaboTimeline.semana_numero == week
+        ).all()
+    else:
+        entries = SilaboTimeline.query.filter(
+            SilaboTimeline.id_curso == id_curso,
+            SilaboTimeline.semana_numero <= week
+        ).order_by(SilaboTimeline.semana_numero.asc()).all()
+        
     if not entries:
         return jsonify({"error": "No hay temas cargados en el sílabo para este curso."}), 400
         
-    # Gather syllabus content
+    # Query student's notes and summaries
+    from models import ApunteEstudiante
+    apuntes = ApunteEstudiante.query.filter(
+        ApunteEstudiante.id_alumno == id_alumno,
+        ApunteEstudiante.id_curso == id_curso
+    ).all()
+    apuntes_by_week = {a.semana: a for a in apuntes if a.semana}
+        
+    # Gather syllabus content combined with student weekly summaries
     syllabus_content = []
     for e in entries:
-        syllabus_content.append(f"Semana {e.semana_numero}: Tema: {e.tema_central}. Lecturas: {e.lecturas_obligatorias or 'Ninguna'}")
+        apunte = apuntes_by_week.get(e.semana_numero)
+        resumen_stud = ""
+        if apunte:
+            if apunte.resumen_ia:
+                resumen_stud = f" | Resumen de apuntes del alumno: {apunte.resumen_ia}"
+            elif apunte.texto_notas:
+                resumen_stud = f" | Notas de la pizarra del alumno: {apunte.texto_notas}"
+        syllabus_content.append(f"Semana {e.semana_numero}: Tema: {e.tema_central}. Lecturas: {e.lecturas_obligatorias or 'Ninguna'}{resumen_stud}")
     context_str = "\n".join(syllabus_content)
     
     if modalidad == 'resumen':
         system_prompt = (
             "Eres un locutor de un podcast educativo de la UNFV de tono muy coloquial, fluido, directo y amigable. "
-            "Genera un guión estructurado de podcast de repaso basado en los temas del curso provistos. "
+            "Genera un guión estructurado de podcast de repaso basado en los temas del curso y los resúmenes del alumno provistos. "
             "El guión debe durar aproximadamente el tiempo estimado por el alumno y estar dividido en secciones con títulos llamativos. "
             "Devuelve estrictamente un JSON válido con la siguiente estructura:\n"
             "{\n"
@@ -52,7 +74,7 @@ def generate_script():
             "  ]\n"
             "}"
         )
-        user_prompt = f"Temario del curso:\n{context_str}\nTiempo estimado del traslado: {tiempo} minutos."
+        user_prompt = f"Temario y resúmenes del curso:\n{context_str}\nTiempo estimado del traslado: {tiempo} minutos."
         
         try:
             def summarize_op(client, model_name):
@@ -63,7 +85,7 @@ def generate_script():
                         response_mime_type="application/json"
                     )
                 )
-            response = gemini_manager.execute_with_retry(summarize_op)
+            response = gemini_manager.execute_with_retry(summarize_op, model_name='gemini-2.5-pro')
             result = json.loads(response.text)
             return jsonify(result), 200
         except Exception as e:
@@ -72,7 +94,7 @@ def generate_script():
     else: # trivia
         system_prompt = (
             "Eres un evaluador interactivo socrático de la UNFV. Genera una lista de 5 preguntas de trivia (opciones de respuesta corta u opción múltiple) "
-            "basadas en los temas del curso provistos. Las preguntas deben ser directas y adecuadas para ser respondidas con audio hablado. "
+            "basadas en los temas del curso y resúmenes provistos. Las preguntas deben ser directas y adecuadas para ser respondidas con audio hablado. "
             "Devuelve estrictamente un JSON válido con la siguiente estructura:\n"
             "{\n"
             "  \"preguntas\": [\n"
@@ -86,7 +108,7 @@ def generate_script():
             "  ]\n"
             "}"
         )
-        user_prompt = f"Temario del curso:\n{context_str}\nTiempo de trayecto: {tiempo} minutos."
+        user_prompt = f"Temario y resúmenes del curso:\n{context_str}\nTiempo de trayecto: {tiempo} minutos."
         
         try:
             def trivia_op(client, model_name):
@@ -97,7 +119,7 @@ def generate_script():
                         response_mime_type="application/json"
                     )
                 )
-            response = gemini_manager.execute_with_retry(trivia_op)
+            response = gemini_manager.execute_with_retry(trivia_op, model_name='gemini-2.5-pro')
             result = json.loads(response.text)
             return jsonify(result), 200
         except Exception as e:

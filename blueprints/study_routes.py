@@ -86,7 +86,7 @@ def create_study_route():
                     response_mime_type="application/json"
                 )
             )
-        response = gemini_manager.execute_with_retry(plan_op)
+        response = gemini_manager.execute_with_retry(plan_op, model_name='gemini-2.5-pro')
         tasks_data = json.loads(response.text).get("tasks", [])
         
         # Deactivate old exams for this course & student
@@ -263,7 +263,7 @@ def recalculate_route():
                     response_mime_type="application/json"
                 )
             )
-        response = gemini_manager.execute_with_retry(recalculate_op)
+        response = gemini_manager.execute_with_retry(recalculate_op, model_name='gemini-2.5-pro')
         response_data = json.loads(response.text)
         
         notification = response_data.get("notificacion", "Ajustamos tu ruta para evitar sobrecargas. ¡Ánimo!")

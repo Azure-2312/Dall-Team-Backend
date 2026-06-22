@@ -6,6 +6,7 @@ from services.koha_service import KohaService
 from services.event_tracker import get_engagement_signals, get_recent_events
 from services.gemini_client_manager import gemini_manager
 import os
+import json
 from werkzeug.utils import secure_filename
 
 timeline_bp = Blueprint('timeline', __name__)
@@ -223,6 +224,98 @@ def get_koha_branch_for_faculty(facultad_name: str) -> str:
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
 
+def generate_weekly_summary(id_alumno, id_curso, semana, texto_notas, canvas_data, background_url):
+    # 1. Compile all available text
+    texts_list = []
+    if texto_notas:
+        texts_list.append(texto_notas)
+        
+    # Extract typed text from whiteboard canvas
+    if canvas_data:
+        try:
+            state = json.loads(canvas_data)
+            if "texts" in state:
+                for t_item in state["texts"]:
+                    if isinstance(t_item, dict) and "text" in t_item:
+                        texts_list.append(t_item["text"])
+        except Exception as e:
+            print("Error parsing canvas_data for texts:", e)
+            
+    compiled_text = "\n".join(texts_list)
+    
+    # 2. Extract text from uploaded background files
+    background_text = ""
+    image_bytes = None
+    image_mime = None
+    
+    if background_url:
+        filename = background_url.split('/')[-1]
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        if os.path.exists(filepath):
+            ext = os.path.splitext(filename)[1].lower()
+            if ext == '.pdf':
+                try:
+                    import fitz
+                    doc = fitz.open(filepath)
+                    pdf_lines = []
+                    for page in doc:
+                        pdf_lines.append(page.get_text())
+                    background_text = "\n".join(pdf_lines)
+                except Exception as pdf_err:
+                    print("Error leyendo PDF para resumen:", pdf_err)
+            elif ext in ['.png', '.jpg', '.jpeg', '.gif']:
+                try:
+                    with open(filepath, 'rb') as f:
+                        image_bytes = f.read()
+                    image_mime = "image/jpeg" if ext in ['.jpg', '.jpeg'] else "image/png"
+                except Exception as img_err:
+                    print("Error leyendo imagen para resumen:", img_err)
+                    
+    # If no content was written or uploaded, return empty
+    if not compiled_text.strip() and not background_text.strip() and not image_bytes:
+        return ""
+        
+    # 3. Request summary from Gemini 2.5 Pro
+    try:
+        from google.genai import types as _gtypes
+        
+        def summarize_op(client, model_name):
+            contents = []
+            
+            prompt = (
+                "Eres un tutor de inteligencia artificial experto de la UNFV.\n"
+                "Tu objetivo es redactar un RESUMEN ACADÉMICO estructurado, claro y explicativo de los temas estudiados esta semana "
+                "por el estudiante basándote en la información recopilada (apuntes del estudiante y material de lectura adjunto).\n"
+                "Instrucciones:\n"
+                "1. Sintetiza los conceptos principales, fórmulas clave, definiciones y conclusiones.\n"
+                "2. Escríbelo en español con un tono motivador, didáctico y claro, ideal para leerse o escucharse en audio.\n"
+                "3. Utiliza subtítulos y viñetas para organizar los temas de forma ordenada por semana de clase."
+            )
+            
+            contents.append(prompt)
+            
+            if image_bytes:
+                img_part = _gtypes.Part.from_bytes(data=image_bytes, mime_type=image_mime)
+                contents.append(img_part)
+                
+            info_to_summarize = f"Apuntes del estudiante:\n{compiled_text}\n\n"
+            if background_text:
+                info_to_summarize += f"Texto del archivo de soporte (PDF):\n{background_text}\n"
+                
+            contents.append(info_to_summarize)
+            
+            return client.models.generate_content(
+                model=model_name,
+                contents=contents
+            )
+            
+        # Invoke using Gemini 2.5 Pro
+        response = gemini_manager.execute_with_retry(summarize_op, model_name='gemini-2.5-pro')
+        return response.text.strip()
+    except Exception as e:
+        print("Error generando resumen con Gemini 2.5 Pro:", e)
+        return ""
+
 @timeline_bp.route('/course-timeline/<id_curso>', methods=['GET'])
 def get_course_timeline(id_curso):
     try:
@@ -259,13 +352,15 @@ def get_student_notes(id_alumno, id_curso, semana):
             return jsonify({
                 "texto_notas": "",
                 "canvas_data": None,
-                "background_url": None
+                "background_url": None,
+                "resumen_ia": ""
             }), 200
             
         return jsonify({
             "texto_notas": apunte.texto_notas,
             "canvas_data": apunte.canvas_data,
-            "background_url": apunte.background_url
+            "background_url": apunte.background_url,
+            "resumen_ia": apunte.resumen_ia or ""
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -297,10 +392,16 @@ def save_student_notes(id_alumno, id_curso, semana):
             )
             db.session.add(apunte)
             
+        # Generate weekly summary with gemini-2.5-pro model
+        resumen_ia = generate_weekly_summary(id_alumno, id_curso, semana, texto_notas, canvas_data, background_url)
+        if resumen_ia:
+            apunte.resumen_ia = resumen_ia
+            
         db.session.commit()
         return jsonify({
             "message": "Apuntes guardados con éxito",
-            "semana": semana
+            "semana": semana,
+            "resumen_ia": resumen_ia or ""
         }), 200
     except Exception as e:
         db.session.rollback()

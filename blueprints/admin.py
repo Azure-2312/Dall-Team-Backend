@@ -362,8 +362,22 @@ def ingest_silabo_rag():
         
         prompt = (
             f"Eres un asistente académico experto de la Universidad Nacional Federico Villarreal (UNFV).\n"
-            f"Tu tarea es analizar el texto del sílabo del curso '{course.nombre_curso}' y extraer de forma estructurada "
-            f"los temas centrales y las lecturas recomendadas para cada una de las 16 semanas de clase.\n\n"
+            f"Tu tarea es analizar el texto extraído de un PDF de sílabo del curso '{course.nombre_curso}' "
+            f"y extraer de forma estructurada los temas centrales y las lecturas recomendadas para cada una de las 16 semanas de clase.\n\n"
+            f"INSTRUCCIONES CRÍTICAS DE PARSING Y DETECCIÓN ESTRUCTURAL:\n"
+            f"1. Detección Estructural de Cuadros y Tablas: Identifica en primer lugar las secciones que representen cuadros, tablas, "
+            f"cuadrículas o cronogramas dentro del texto del sílabo. Estarán delimitadas por cabeceras de columnas como "
+            f"'Semana', 'Unidad', 'Contenido', 'Contenidos Conceptuales/Procedimentales', 'Actividades de Aprendizaje', 'Bibliografía' o 'Lecturas'.\n"
+            f"2. Reconstrucción de Filas por Semana: Debido a que la extracción de texto de un PDF a menudo mezcla o desorganiza el flujo de "
+            f"las columnas horizontales convirtiendo celdas adyacentes en líneas consecutivas, debes reconstruir mentalmente cada fila. "
+            f"Asocia correctamente el número de la semana (por ejemplo, 'Semana 1', 'S1', '1') con el contenido temático y la lectura correspondiente "
+            f"que aparecen en la misma fila horizontal o de forma inmediatamente consecutiva.\n"
+            f"3. Extracción de Contenido Temático y Lecturas por Semana:\n"
+            f"   - 'tema_central': Extrae el título, concepto clave o descripción corta del tema principal dictado en esa semana. Limítalo a un máximo de 150 caracteres.\n"
+            f"   - 'lecturas_obligatorias': Extrae la bibliografía, libros recomendados, capítulos o temas de lectura asociados a la fila de esa semana. Limítalo a un máximo de 150 caracteres.\n"
+            f"4. Coherencia de 16 Semanas: Debes generar exactamente 16 objetos en el arreglo JSON (uno para cada semana de la 1 a la 16). "
+            f"Si el sílabo original contiene menos semanas o temas de unidad, distribúyelos de forma lógica o crea temas secuenciales "
+            f"académicos coherentes con la temática del curso '{course.nombre_curso}' para completar las 16 semanas.\n\n"
             f"Texto del sílabo:\n"
             f"\"\"\"\n{texto_silabo}\n\"\"\"\n\n"
             f"Retorna ÚNICAMENTE un arreglo JSON de objetos que representen las semanas. No incluyas explicaciones ni bloques de código (sin ```json, etc.).\n"
@@ -375,10 +389,7 @@ def ingest_silabo_rag():
             f"    \"lecturas_obligatorias\": \"Título del libro, capítulo o tema sugerido a leer (máximo 150 caracteres)\"\n"
             f"  }},\n"
             f"  ...\n"
-            f"]\n\n"
-            f"REGLA CRÍTICA: Debes generar exactamente 16 objetos en el arreglo (uno para cada semana de la 1 a la 16). "
-            f"Si el sílabo original contiene menos semanas o temas de unidad, distribúyelos de forma lógica o "
-            f"crea temas secuenciales académicos coherentes con la temática del curso '{course.nombre_curso}' para completar las 16 semanas."
+            f"]"
         )
 
         weeks_data = []
@@ -390,7 +401,7 @@ def ingest_silabo_rag():
                 
                 _client = _genai_new.Client(api_key=gemini_key)
                 res = _client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.5-pro',
                     contents=prompt,
                     config=_gtypes_new.GenerateContentConfig(
                         response_mime_type='application/json'
@@ -666,7 +677,7 @@ def ingest_malla_ia():
     if not gemini_key:
         return jsonify({"error": "La clave de API de Gemini no está configurada en el servidor"}), 500
         
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key={gemini_key}"
     
     prompt = (
         f"Eres un experto en mallas curriculares universitarias para la Universidad Nacional Federico Villarreal (UNFV).\n"

@@ -158,6 +158,16 @@ class KohaService:
         }
 
     def search_books(self, query: str, sede: str = None) -> dict:
+        if not query:
+            return {"resultados": [], "total": 0}
+            
+        res = self._execute_search_internal(query, sede)
+        if res.get("total", 0) == 0 and sede is not None and sede != "":
+            print(f"--- Koha search: 0 results with branch filter '{sede}'. Retrying without filter... ---")
+            res = self._execute_search_internal(query, None)
+        return res
+
+    def _execute_search_internal(self, query: str, sede: str = None) -> dict:
         """
         Queries the real UNFV Koha catalog using BeautifulSoup to scrape and parse the search results.
         Returns a dictionary: { "resultados": list, "total": int }
