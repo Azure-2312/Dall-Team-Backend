@@ -288,6 +288,7 @@ class ApunteEstudiante(db.Model):
     texto_notas = db.Column(db.Text, default='', nullable=False)
     canvas_data = db.Column(db.Text, nullable=True) # transparent Base64 PNG drawings layer
     background_url = db.Column(db.Text, nullable=True) # uploaded background image/file path/url
+    resumen_ia = db.Column(db.Text, nullable=True)
     fecha_modificacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     alumno = db.relationship('Alumno', backref=db.backref('apuntes_cursos', lazy=True, cascade='all,delete-orphan'))
