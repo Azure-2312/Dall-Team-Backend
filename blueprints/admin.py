@@ -390,7 +390,7 @@ def ingest_silabo_rag():
                 
                 _client = _genai_new.Client(api_key=gemini_key)
                 res = _client.models.generate_content(
-                    model='gemini-2.0-flash-lite',
+                    model='gemini-2.5-flash',
                     contents=prompt,
                     config=_gtypes_new.GenerateContentConfig(
                         response_mime_type='application/json'

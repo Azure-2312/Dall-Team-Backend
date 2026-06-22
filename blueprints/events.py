@@ -188,7 +188,7 @@ def api_get_quick_message():
             )
             
             res = _client.models.generate_content(
-                model='gemini-2.0-flash-lite',
+                model='gemini-2.5-flash',
                 contents=prompt,
                 config=_gtypes.GenerateContentConfig(
                     response_mime_type='application/json'

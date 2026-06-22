@@ -38,7 +38,7 @@ class RAGService:
             try:
                 def embed_op(client, model_name):
                     return client.models.embed_content(
-                        model="models/text-embedding-004",
+                        model="models/gemini-embedding-2",
                         contents=text
                     )
                 result = gemini_manager.execute_with_retry(embed_op)
