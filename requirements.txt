@@ -10,3 +10,5 @@ numpy==1.26.4
 Flask-JWT-Extended==4.6.0
 PyJWT==2.8.0
 beautifulsoup4==4.12.3
+google-genai==2.9.0
+pypdf==6.13.3
