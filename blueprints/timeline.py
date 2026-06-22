@@ -532,7 +532,7 @@ def timeline_chat():
                 f"Responde únicamente con una de estas palabras en mayúsculas: 'ESTUDIO' o 'CHIT-CHAT'."
             )
             class_res = _client.models.generate_content(
-                model='gemini-2.0-flash-lite',
+                model='gemini-2.5-flash',
                 contents=classification_prompt
             )
             class_text = class_res.text.strip().upper()
@@ -742,7 +742,7 @@ def timeline_chat():
             contents.append(_gtypes.Content(role='user', parts=[_gtypes.Part(text=mensaje)]))
             
             response = _client.models.generate_content(
-                model='gemini-2.0-flash-lite',
+                model='gemini-2.5-flash',
                 contents=contents,
                 config=_gtypes.GenerateContentConfig(
                     response_mime_type='application/json'

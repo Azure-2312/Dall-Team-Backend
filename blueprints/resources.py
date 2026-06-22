@@ -24,9 +24,42 @@ def search_koha_books():
         books_data = koha_service.search_books(query, sede=sede if sede else None)
         return jsonify(books_data)
     except Exception as e:
+        import traceback
+        print("ERROR IN KOHA SEARCH ENDPOINT:")
+        traceback.print_exc()
+        
+        # Super-fallback to mock books if anything goes completely wrong
+        from services.koha_service import MOCK_BOOKS
+        from config.sedes_koha import SEDES_KOHA
+        import unicodedata
+        
+        def clean_text(text):
+            if not text:
+                return ""
+            return "".join(c for c in unicodedata.normalize('NFD', text.lower()) if unicodedata.category(c) != 'Mn')
+            
+        q_clean = clean_text(query)
+        filtered = []
+        for book in MOCK_BOOKS:
+            # If query is empty or matches title/author
+            if not q_clean or q_clean in clean_text(book.get("titulo", "")) or q_clean in clean_text(book.get("autor", "")):
+                if sede:
+                    sede_name = SEDES_KOHA.get(sede, "").lower()
+                    match_sede = False
+                    for s_info in book.get("sedes", []):
+                        s_name = s_info.get("sede", "").lower()
+                        if sede_name in s_name or s_name in sede_name:
+                            match_sede = True
+                            break
+                    if not match_sede:
+                        continue
+                filtered.append(book)
+                
         return jsonify({
-            "error": "El catálogo de la biblioteca Koha UNFV no se encuentra disponible temporalmente."
-        }), 502
+            "resultados": filtered,
+            "total": len(filtered),
+            "fallback": True
+        }), 200
 
 @resources_bp.route('/tutors/<id_curso>', methods=['GET'])
 def get_tutors_by_course(id_curso):

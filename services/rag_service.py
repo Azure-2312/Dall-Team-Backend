@@ -112,13 +112,15 @@ class RAGService:
         user_prompt = f"Tema: {topic}\nContexto: {context}\nCantidad de preguntas: {count}"
 
         # 1. Try Gemini
-        if self.gemini_key:
+        if self.gemini_key and self._gemini_client:
             try:
-                model = genai.GenerativeModel(
-                    'gemini-2.5-flash',
-                    generation_config={"response_mime_type": "application/json"}
+                response = self._gemini_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[system_prompt, user_prompt],
+                    config=_gtypes_new.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
-                response = model.generate_content([system_prompt, user_prompt])
                 data = json.loads(response.text)
                 return data.get("questions", [])
             except Exception as e:
@@ -159,13 +161,15 @@ class RAGService:
         )
         
         # 1. Try Gemini
-        if self.gemini_key:
+        if self.gemini_key and self._gemini_client:
             try:
-                model = genai.GenerativeModel(
-                    'gemini-2.5-flash',
-                    generation_config={"response_mime_type": "application/json"}
+                response = self._gemini_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=[system_prompt, f"Texto del estudiante: {text}"],
+                    config=_gtypes_new.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
-                response = model.generate_content([system_prompt, f"Texto del estudiante: {text}"])
                 return json.loads(response.text)
             except Exception as e:
                 print(f"Gemini Sentiment Analysis Error: {e}. Falling back...")
